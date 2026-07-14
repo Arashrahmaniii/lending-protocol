@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {LendingPool} from "../src/LendingPool.sol";
+import {PoolConfigurator} from "../src/PoolConfigurator.sol";
 import {PriceOracle} from "../src/PriceOracle.sol";
 import {DefaultInterestRateStrategy} from "../src/DefaultInterestRateStrategy.sol";
 import {MockERC20} from "../src/mocks/MockERC20.sol";
@@ -13,6 +14,7 @@ import {DataTypes} from "../src/libraries/DataTypes.sol";
 /// @notice Shared deployment + reserve setup for all test suites.
 abstract contract BaseTest is Test {
     LendingPool pool;
+    PoolConfigurator configurator;
     PriceOracle oracle;
     DefaultInterestRateStrategy strategy;
 
@@ -34,6 +36,8 @@ abstract contract BaseTest is Test {
     function setUp() public virtual {
         oracle = new PriceOracle();
         pool = new LendingPool(address(oracle), treasury);
+        configurator = new PoolConfigurator(address(pool));
+        pool.setConfigurator(address(configurator));
 
         // optimal 80%, base 0%, slope1 4% APR, slope2 75% APR (in ray)
         strategy = new DefaultInterestRateStrategy(
@@ -90,7 +94,7 @@ abstract contract BaseTest is Test {
             borrowingEnabled: true,
             usableAsCollateral: true
         });
-        return pool.initReserve(asset, cfg, address(strategy), symbol);
+        return configurator.initReserve(asset, cfg, address(strategy), symbol);
     }
 
     /// @dev Standard fixture: bob supplies 500k USDC; alice deposits 10 WETH ($20k).

@@ -7,7 +7,7 @@
 
 An over-collateralised, multi-asset money market in the style of **Aave**, built from scratch in Solidity. Users supply assets to earn interest, borrow against their collateral, take **flash loans**, delegate borrowing power, and unhealthy positions are **liquidated** by keepers for a bonus.
 
-Verified by **38 tests**: unit, fuzz (property-based), and stateful **invariant** testing with a randomized multi-actor handler.
+Verified by **39 tests**: unit, fuzz (property-based), and stateful **invariant** testing with a randomized multi-actor handler.
 
 > ⚠️ Reference implementation for demonstration purposes — not audited. Do not use with real funds.
 
@@ -45,16 +45,27 @@ Verified by **38 tests**: unit, fuzz (property-based), and stateful **invariant*
                      │ HF-checked;     │   │ credit delegation │
                      │ holds the vault │   │                   │
                      └─────────────────┘   └───────────────────┘
+                              ▲
+                              │ deploys aToken/debtToken,
+                              │ validates risk params,
+                              │ then registers via
+                              │ pool.initReserve(...)
+                     ┌────────┴─────────┐
+                     │ PoolConfigurator │  admin-only reserve listing & config
+                     └──────────────────┘
 ```
 
 | Contract | Responsibility |
 |---|---|
-| [`LendingPool`](src/LendingPool.sol) | All user actions, index/rate updates, health factors, liquidations, flash loans, admin |
+| [`LendingPool`](src/LendingPool.sol) | User actions, index/rate updates, health factors, liquidations, flash loans |
+| [`PoolConfigurator`](src/PoolConfigurator.sol) | Reserve listing (deploys aToken/debtToken), risk-parameter validation & updates |
 | [`AToken`](src/tokens/AToken.sol) | Interest-bearing receipt token; transfers finalized by the pool with a health-factor check |
 | [`VariableDebtToken`](src/tokens/VariableDebtToken.sol) | Scaled debt tracking + credit delegation allowances |
 | [`DefaultInterestRateStrategy`](src/DefaultInterestRateStrategy.sol) | Utilisation → (supply APR, borrow APR) |
 | [`ChainlinkPriceOracle`](src/ChainlinkPriceOracle.sol) | Chainlink adapter: answer/staleness validation, decimal normalisation, fallback |
 | [`WadRayMath`](src/libraries/WadRayMath.sol) / [`MathUtils`](src/libraries/MathUtils.sol) | Fixed-point math; linear (supply) & binomially-compounded (borrow) interest |
+
+**Why a separate `PoolConfigurator`?** Deploying `AToken`/`VariableDebtToken` from inside `LendingPool.initReserve` embeds both contracts' full creation bytecode into `LendingPool` itself — that alone pushed it past the **EIP-170 24,576-byte** contract size limit (Ethereum refuses to deploy oversized contracts). Splitting reserve administration into its own contract — the same pattern Aave uses — dropped `LendingPool` from 27,545 to **16,074 bytes**, restoring 8.5KB of headroom, while keeping every user-facing hot path untouched.
 
 ## The math
 
@@ -92,7 +103,8 @@ A subtle property surfaced by the fuzz suite: once collateral value falls *below
 ## Testing
 
 ```bash
-forge test        # 38 tests: 6 suites
+forge test          # 39 tests: 6 suites
+forge build --sizes # verify every contract fits under EIP-170 (CI-enforced)
 ```
 
 - **Unit** — full lifecycle: deposit, LTV-limited borrow, interest accrual, repay, both liquidation modes, treasury fees

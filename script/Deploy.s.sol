@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script, console2} from "forge-std/Script.sol";
 import {LendingPool} from "../src/LendingPool.sol";
+import {PoolConfigurator} from "../src/PoolConfigurator.sol";
 import {PriceOracle} from "../src/PriceOracle.sol";
 import {ChainlinkPriceOracle} from "../src/ChainlinkPriceOracle.sol";
 import {DefaultInterestRateStrategy} from "../src/DefaultInterestRateStrategy.sol";
@@ -32,6 +33,8 @@ contract Deploy is Script {
         // Chainlink-style oracle with staleness checks + mock feeds for local dev.
         ChainlinkPriceOracle oracle = new ChainlinkPriceOracle();
         LendingPool pool = new LendingPool(address(oracle), treasury);
+        PoolConfigurator configurator = new PoolConfigurator(address(pool));
+        pool.setConfigurator(address(configurator));
 
         // Kinked rate curve: optimal 80%, base 0, slope1 4%, slope2 75% (APR, ray).
         DefaultInterestRateStrategy strategy = new DefaultInterestRateStrategy(
@@ -46,7 +49,7 @@ contract Deploy is Script {
         oracle.setFeed(address(weth), address(ethFeed), 1 hours);
         oracle.setFeed(address(usdc), address(usdcFeed), 24 hours);
 
-        pool.initReserve(
+        configurator.initReserve(
             address(weth),
             DataTypes.ReserveConfig({
                 ltv: 8000,
@@ -65,7 +68,7 @@ contract Deploy is Script {
             "WETH"
         );
 
-        pool.initReserve(
+        configurator.initReserve(
             address(usdc),
             DataTypes.ReserveConfig({
                 ltv: 8500,
@@ -84,9 +87,10 @@ contract Deploy is Script {
             "USDC"
         );
 
-        console2.log("Oracle:   ", address(oracle));
-        console2.log("Pool:     ", address(pool));
-        console2.log("Strategy: ", address(strategy));
+        console2.log("Oracle:       ", address(oracle));
+        console2.log("Pool:         ", address(pool));
+        console2.log("Configurator: ", address(configurator));
+        console2.log("Strategy:     ", address(strategy));
         console2.log("WETH:     ", address(weth));
         console2.log("USDC:     ", address(usdc));
 

@@ -104,7 +104,7 @@ contract FeaturesTest is BaseTest {
         // Freeze WETH.
         DataTypes.ReserveConfig memory cfg = pool.getReserveData(address(weth)).config;
         cfg.isFrozen = true;
-        pool.updateReserveConfig(address(weth), cfg);
+        configurator.updateReserveConfig(address(weth), cfg);
 
         vm.startPrank(alice);
         vm.expectRevert(bytes("Pool: reserve frozen"));
@@ -178,14 +178,14 @@ contract FeaturesTest is BaseTest {
             borrowingEnabled: true,
             usableAsCollateral: true
         });
-        vm.expectRevert(bytes("Pool: ltv > threshold"));
-        pool.initReserve(address(dai), cfg, address(strategy), "DAI");
+        vm.expectRevert(bytes("Configurator: ltv > threshold"));
+        configurator.initReserve(address(dai), cfg, address(strategy), "DAI");
 
         cfg.ltv = 7000;
         cfg.liquidationThreshold = 9900;
         cfg.liquidationBonus = 10_500; // 99% * 105% > 100%: guaranteed bad debt
-        vm.expectRevert(bytes("Pool: unsafe threshold/bonus"));
-        pool.initReserve(address(dai), cfg, address(strategy), "DAI");
+        vm.expectRevert(bytes("Configurator: unsafe threshold/bonus"));
+        configurator.initReserve(address(dai), cfg, address(strategy), "DAI");
     }
 
     function test_OnlyAdminCanInitReserve() public {
@@ -193,7 +193,15 @@ contract FeaturesTest is BaseTest {
         DataTypes.ReserveConfig memory cfg = pool.getReserveData(address(weth)).config;
 
         vm.prank(alice);
-        vm.expectRevert(bytes("Pool: not admin"));
-        pool.initReserve(address(dai), cfg, address(strategy), "DAI");
+        vm.expectRevert(bytes("Configurator: not admin"));
+        configurator.initReserve(address(dai), cfg, address(strategy), "DAI");
+    }
+
+    function test_PoolRejectsInitReserveFromNonConfigurator() public {
+        // SECURITY: even the admin cannot bypass the configurator directly.
+        MockERC20 dai = new MockERC20("Dai", "DAI", 18);
+        DataTypes.ReserveConfig memory cfg = pool.getReserveData(address(weth)).config;
+        vm.expectRevert(bytes("Pool: not configurator"));
+        pool.initReserve(address(dai), cfg, address(this), address(this), address(strategy));
     }
 }

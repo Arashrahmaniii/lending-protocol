@@ -48,6 +48,7 @@ contract LendingPool is ILendingPool {
     address public immutable admin;
     address public immutable treasury;
     address public emergencyAdmin;
+    address public configurator;
     IPriceOracle public oracle;
     bool public paused;
 
@@ -90,6 +91,7 @@ contract LendingPool is ILendingPool {
     event PausedSet(bool paused);
     event OracleUpdated(address indexed oracle);
     event EmergencyAdminUpdated(address indexed emergencyAdmin);
+    event ConfiguratorUpdated(address indexed configurator);
     event MintedToTreasury(address indexed asset, uint256 amount);
 
     // --------------------------------------------------------------------- //
@@ -110,6 +112,11 @@ contract LendingPool is ILendingPool {
 
     modifier onlyAdmin() {
         require(msg.sender == admin, "Pool: not admin");
+        _;
+    }
+
+    modifier onlyConfigurator() {
+        require(msg.sender == configurator, "Pool: not configurator");
         _;
     }
 
@@ -137,6 +144,14 @@ contract LendingPool is ILendingPool {
         emit EmergencyAdminUpdated(_emergencyAdmin);
     }
 
+    /// @notice One-time wiring of the PoolConfigurator. Callable once by admin.
+    function setConfigurator(address _configurator) external onlyAdmin {
+        require(configurator == address(0), "Pool: configurator already set");
+        require(_configurator != address(0), "Pool: zero address");
+        configurator = _configurator;
+        emit ConfiguratorUpdated(_configurator);
+    }
+
     /// @notice Circuit breaker. Halts all user-facing actions.
     function setPaused(bool value) external {
         require(msg.sender == emergencyAdmin || msg.sender == admin, "Pool: not authorized");
@@ -144,81 +159,53 @@ contract LendingPool is ILendingPool {
         emit PausedSet(value);
     }
 
+    /**
+     * @notice Registers a reserve with pre-deployed aToken/debtToken contracts
+     *         and pre-validated config. Callable only by PoolConfigurator,
+     *         which owns token deployment and risk-parameter validation so
+     *         that bytecode stays out of the hot LendingPool contract.
+     */
     function initReserve(
         address asset,
         DataTypes.ReserveConfig calldata config,
-        address interestRateStrategy,
-        string calldata assetSymbol
-    ) external onlyAdmin returns (address aTokenAddr, address debtTokenAddr) {
+        address aTokenAddress,
+        address variableDebtTokenAddress,
+        address interestRateStrategy
+    ) external onlyConfigurator {
         DataTypes.ReserveData storage r = _reserves[asset];
-        require(asset != address(0) && interestRateStrategy != address(0), "Pool: zero address");
         require(r.aTokenAddress == address(0), "Pool: reserve exists");
         require(_reservesList.length < MAX_RESERVES, "Pool: too many reserves");
-        _validateReserveConfig(config);
-
-        AToken aToken = new AToken(
-            address(this),
-            asset,
-            string.concat("Lend Interest Bearing ", assetSymbol),
-            string.concat("l", assetSymbol),
-            config.decimals
-        );
-        VariableDebtToken debtToken = new VariableDebtToken(
-            address(this),
-            asset,
-            string.concat("Lend Variable Debt ", assetSymbol),
-            string.concat("d", assetSymbol),
-            config.decimals
-        );
 
         r.config = config;
         r.liquidityIndex = WadRayMath.RAY;
         r.variableBorrowIndex = WadRayMath.RAY;
         r.lastUpdateTimestamp = uint40(block.timestamp);
-        r.aTokenAddress = address(aToken);
-        r.variableDebtTokenAddress = address(debtToken);
+        r.aTokenAddress = aTokenAddress;
+        r.variableDebtTokenAddress = variableDebtTokenAddress;
         r.interestRateStrategy = interestRateStrategy;
         r.id = uint16(_reservesList.length);
         _reservesList.push(asset);
 
-        emit ReserveInitialized(asset, address(aToken), address(debtToken));
-        return (address(aToken), address(debtToken));
+        emit ReserveInitialized(asset, aTokenAddress, variableDebtTokenAddress);
     }
 
-    /// @notice Updates risk parameters of an existing reserve. Decimals are immutable.
+    /// @notice Updates risk parameters of an existing reserve. Configurator-validated.
     function updateReserveConfig(address asset, DataTypes.ReserveConfig calldata config)
         external
-        onlyAdmin
+        onlyConfigurator
     {
         DataTypes.ReserveData storage r = _reserves[asset];
         require(r.aTokenAddress != address(0), "Pool: no reserve");
-        require(config.decimals == r.config.decimals, "Pool: decimals immutable");
-        _validateReserveConfig(config);
         r.config = config;
         emit ReserveConfigUpdated(asset);
     }
 
-    function setInterestRateStrategy(address asset, address strategy) external onlyAdmin {
-        require(strategy != address(0), "Pool: zero address");
+    function setInterestRateStrategy(address asset, address strategy) external onlyConfigurator {
         DataTypes.ReserveData storage r = _reserves[asset];
         require(r.aTokenAddress != address(0), "Pool: no reserve");
         _updateState(r);
         r.interestRateStrategy = strategy;
         _updateInterestRates(asset, r);
-    }
-
-    function _validateReserveConfig(DataTypes.ReserveConfig calldata config) internal pure {
-        require(config.decimals >= 6 && config.decimals <= 18, "Pool: bad decimals");
-        require(config.ltv <= config.liquidationThreshold, "Pool: ltv > threshold");
-        require(config.liquidationThreshold <= BPS, "Pool: threshold > 100%");
-        require(config.liquidationBonus > BPS, "Pool: bonus <= 100%");
-        // A liquidation must never be able to leave the protocol with bad debt
-        // by design: threshold * bonus must stay under 100%.
-        require(
-            (config.liquidationThreshold * config.liquidationBonus) / BPS <= BPS,
-            "Pool: unsafe threshold/bonus"
-        );
-        require(config.reserveFactor < BPS, "Pool: bad reserve factor");
     }
 
     // --------------------------------------------------------------------- //
