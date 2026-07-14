@@ -1,6 +1,6 @@
 # DeFi Lending Protocol
 
-[![CI](https://github.com/arashrahmani/lending-protocol/actions/workflows/ci.yml/badge.svg)](../../actions)
+[![CI](https://github.com/Arashrahmaniii/lending-protocol/actions/workflows/ci.yml/badge.svg)](../../actions)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636?logo=solidity)](https://soliditylang.org)
 [![Foundry](https://img.shields.io/badge/Built%20with-Foundry-FFDB1C)](https://getfoundry.sh)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -103,7 +103,7 @@ forge test        # 38 tests: 6 suites
 ## Getting started
 
 ```bash
-git clone <this repo> && cd lending-protocol
+git clone https://github.com/Arashrahmaniii/lending-protocol.git && cd lending-protocol
 forge install foundry-rs/forge-std --no-git   # if lib/ is absent
 forge build
 forge test -vv
