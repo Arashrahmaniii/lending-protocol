@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  FOUNDRY_PROFILE: default
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install dependencies
+        run: forge install foundry-rs/forge-std --no-git
+        continue-on-error: true
+
+      - name: Build (with contract sizes)
+        run: forge build --sizes
+
+      - name: Run tests (unit + fuzz + invariant)
+        run: forge test -vvv
