@@ -40,9 +40,7 @@ abstract contract BaseTest is Test {
         pool.setConfigurator(address(configurator));
 
         // optimal 80%, base 0%, slope1 4% APR, slope2 75% APR (in ray)
-        strategy = new DefaultInterestRateStrategy(
-            (80 * RAY) / 100, 0, (4 * RAY) / 100, (75 * RAY) / 100
-        );
+        strategy = new DefaultInterestRateStrategy((80 * RAY) / 100, 0, (4 * RAY) / 100, (75 * RAY) / 100);
 
         weth = new MockERC20("Wrapped Ether", "WETH", 18);
         usdc = new MockERC20("USD Coin", "USDC", 6);

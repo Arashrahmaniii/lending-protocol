@@ -25,9 +25,7 @@ contract FlashLoanTest is BaseTest {
 
         assertEq(receiver.lastAmount(), amount);
         assertEq(receiver.lastPremium(), premium);
-        assertEq(
-            usdc.balanceOf(address(aUsdc)), vaultBefore + premium, "vault grew by the premium"
-        );
+        assertEq(usdc.balanceOf(address(aUsdc)), vaultBefore + premium, "vault grew by the premium");
     }
 
     function test_FlashLoanPremiumAccruesToSuppliers() public {

@@ -14,13 +14,10 @@ contract MockFlashLoanReceiver is IFlashLoanReceiver {
         pool = _pool;
     }
 
-    function executeOperation(
-        address asset,
-        uint256 amount,
-        uint256 premium,
-        address,
-        bytes calldata
-    ) external returns (bool) {
+    function executeOperation(address asset, uint256 amount, uint256 premium, address, bytes calldata)
+        external
+        returns (bool)
+    {
         require(msg.sender == pool, "receiver: only pool");
         lastAmount = amount;
         lastPremium = premium;

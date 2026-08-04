@@ -63,8 +63,7 @@ contract ChainlinkPriceOracle is IPriceOracle {
             return fallbackOracle.getAssetPrice(asset);
         }
 
-        (, int256 answer,, uint256 updatedAt,) =
-            AggregatorV3Interface(feed.aggregator).latestRoundData();
+        (, int256 answer,, uint256 updatedAt,) = AggregatorV3Interface(feed.aggregator).latestRoundData();
 
         require(answer > 0, "Oracle: invalid answer");
         require(updatedAt != 0, "Oracle: round not complete");

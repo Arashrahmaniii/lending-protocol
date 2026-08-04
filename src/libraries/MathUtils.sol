@@ -16,11 +16,7 @@ library MathUtils {
     uint256 internal constant SECONDS_PER_YEAR = 365 days;
 
     /// @dev Linear interest: 1 + rate * dt / year  (in ray)
-    function calculateLinearInterest(uint256 ratePerYear, uint40 lastUpdate)
-        internal
-        view
-        returns (uint256)
-    {
+    function calculateLinearInterest(uint256 ratePerYear, uint40 lastUpdate) internal view returns (uint256) {
         uint256 dt = block.timestamp - uint256(lastUpdate);
         if (dt == 0) return WadRayMath.RAY;
         uint256 accrued = (ratePerYear * dt) / SECONDS_PER_YEAR;

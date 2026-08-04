@@ -112,11 +112,14 @@ forge build --sizes # verify every contract fits under EIP-170 (CI-enforced)
 - **Fuzz** (256 runs each) — lossless deposit/withdraw round-trip, borrow never exceeds LTV, interest monotonicity, liquidation improves HF
 - **Invariant** (64 runs × 32-call sequences, 3 actors) — reserve solvency (`cash + debt ≥ owed to suppliers`), scaled-supply consistency, no self-inflicted underwater positions
 
+Slither runs in CI. [`SECURITY.md`](SECURITY.md) records the full baseline — 76
+findings, each either fixed or justified in writing — and documents the economic
+properties static analysis cannot reach, along with the tests that cover them.
+
 ## Getting started
 
 ```bash
-git clone https://github.com/Arashrahmaniii/lending-protocol.git && cd lending-protocol
-forge install foundry-rs/forge-std --no-git   # if lib/ is absent
+git clone --recursive https://github.com/Arashrahmaniii/lending-protocol.git && cd lending-protocol
 forge build
 forge test -vv
 

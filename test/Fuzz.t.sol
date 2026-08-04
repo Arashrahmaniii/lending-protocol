@@ -67,9 +67,7 @@ contract FuzzTest is BaseTest {
     ///      still worth more than debt * liquidationBonus — improves the health
     ///      factor. (Below that ratio the bonus mathematically worsens HF; that
     ///      regime exists in Aave too and is why liquidations must be prompt.)
-    function testFuzz_LiquidationImprovesHealthFactor(uint256 priceDrop, uint256 debtToCover)
-        public
-    {
+    function testFuzz_LiquidationImprovesHealthFactor(uint256 priceDrop, uint256 debtToCover) public {
         // HF < 1 requires price < ~1818; collateral/debt > 1.05 requires price > 1575.
         priceDrop = bound(priceDrop, 1600e18, 1800e18);
         debtToCover = bound(debtToCover, 100e6, 7_500e6);

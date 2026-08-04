@@ -18,9 +18,7 @@ import {WadRayMath} from "../libraries/WadRayMath.sol";
 contract VariableDebtToken is ERC20Base, IScaledToken {
     using WadRayMath for uint256;
 
-    event BorrowAllowanceDelegated(
-        address indexed fromUser, address indexed toUser, uint256 amount
-    );
+    event BorrowAllowanceDelegated(address indexed fromUser, address indexed toUser, uint256 amount);
 
     ILendingPool public immutable pool;
     address public immutable underlying;
@@ -62,10 +60,7 @@ contract VariableDebtToken is ERC20Base, IScaledToken {
     }
 
     /// @notice Consumes delegated borrowing power. Pool-only.
-    function decreaseBorrowAllowance(address delegator, address delegatee, uint256 amount)
-        external
-        onlyPool
-    {
+    function decreaseBorrowAllowance(address delegator, address delegatee, uint256 amount) external onlyPool {
         uint256 allowed = _borrowAllowances[delegator][delegatee];
         require(allowed >= amount, "DebtToken: delegation exceeded");
         _borrowAllowances[delegator][delegatee] = allowed - amount;
@@ -103,11 +98,7 @@ contract VariableDebtToken is ERC20Base, IScaledToken {
     //                          Pool-only actions                            //
     // --------------------------------------------------------------------- //
 
-    function mint(address to, uint256 amount, uint256 index)
-        external
-        onlyPool
-        returns (bool firstMint)
-    {
+    function mint(address to, uint256 amount, uint256 index) external onlyPool returns (bool firstMint) {
         uint256 scaled = amount.rayDiv(index);
         require(scaled != 0, "DebtToken: invalid mint");
         firstMint = _scaledBalances[to] == 0;

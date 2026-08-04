@@ -101,11 +101,7 @@ contract AToken is ERC20Base, IScaledToken {
     //                          Pool-only actions                            //
     // --------------------------------------------------------------------- //
 
-    function mint(address to, uint256 amount, uint256 index)
-        external
-        onlyPool
-        returns (bool firstMint)
-    {
+    function mint(address to, uint256 amount, uint256 index) external onlyPool returns (bool firstMint) {
         uint256 scaled = amount.rayDiv(index);
         require(scaled != 0, "AToken: invalid mint");
         firstMint = _scaledBalances[to] == 0;
@@ -135,8 +131,7 @@ contract AToken is ERC20Base, IScaledToken {
 
     /// @notice Sends the underlying asset out of the aToken vault. Pool-only.
     function transferUnderlyingTo(address to, uint256 amount) external onlyPool {
-        (bool ok, bytes memory data) =
-            underlying.call(abi.encodeWithSelector(0xa9059cbb, to, amount)); // transfer(address,uint256)
+        (bool ok, bytes memory data) = underlying.call(abi.encodeWithSelector(0xa9059cbb, to, amount)); // transfer(address,uint256)
         require(ok && (data.length == 0 || abi.decode(data, (bool))), "AToken: transfer failed");
     }
 }

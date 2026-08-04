@@ -19,13 +19,33 @@ jobs:
 
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
 
-      - name: Install dependencies
-        run: forge install foundry-rs/forge-std --no-git
-        continue-on-error: true
+      - name: Check formatting
+        run: forge fmt --check
 
       - name: Build (with contract sizes)
         run: forge build --sizes
 
       - name: Run tests (unit + fuzz + invariant)
         run: forge test -vvv
+
+  slither:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: stable
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        with:
+          fail-on: none
+          slither-args: --filter-paths "lib|test|script" --exclude-dependencies

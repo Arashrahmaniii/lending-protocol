@@ -66,10 +66,7 @@ contract PoolConfigurator {
     }
 
     /// @notice Updates risk parameters of an existing reserve. Decimals are immutable.
-    function updateReserveConfig(address asset, DataTypes.ReserveConfig calldata config)
-        external
-        onlyAdmin
-    {
+    function updateReserveConfig(address asset, DataTypes.ReserveConfig calldata config) external onlyAdmin {
         DataTypes.ReserveData memory existing = pool.getReserveData(asset);
         require(existing.aTokenAddress != address(0), "Configurator: no reserve");
         require(config.decimals == existing.config.decimals, "Configurator: decimals immutable");

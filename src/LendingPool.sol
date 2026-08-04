@@ -75,7 +75,11 @@ contract LendingPool is ILendingPool {
     event Borrow(address indexed asset, address indexed user, address indexed onBehalfOf, uint256 amount);
     event Repay(address indexed asset, address indexed user, address indexed onBehalfOf, uint256 amount);
     event FlashLoan(
-        address indexed receiver, address indexed initiator, address indexed asset, uint256 amount, uint256 premium
+        address indexed receiver,
+        address indexed initiator,
+        address indexed asset,
+        uint256 amount,
+        uint256 premium
     );
     event LiquidationCall(
         address indexed collateralAsset,
@@ -212,11 +216,7 @@ contract LendingPool is ILendingPool {
     //                             User actions                              //
     // --------------------------------------------------------------------- //
 
-    function deposit(address asset, uint256 amount, address onBehalfOf)
-        external
-        nonReentrant
-        whenNotPaused
-    {
+    function deposit(address asset, uint256 amount, address onBehalfOf) external nonReentrant whenNotPaused {
         DataTypes.ReserveData storage r = _reserves[asset];
         require(r.config.isActive, "Pool: reserve inactive");
         require(!r.config.isFrozen, "Pool: reserve frozen");
@@ -227,9 +227,7 @@ contract LendingPool is ILendingPool {
 
         uint256 supplyCap = r.config.supplyCap;
         if (supplyCap != 0) {
-            require(
-                AToken(r.aTokenAddress).totalSupply() + amount <= supplyCap, "Pool: supply cap"
-            );
+            require(AToken(r.aTokenAddress).totalSupply() + amount <= supplyCap, "Pool: supply cap");
         }
 
         require(
@@ -275,9 +273,7 @@ contract LendingPool is ILendingPool {
 
         // Only positions with open borrows need a health check.
         if (_isBorrowingAny(msg.sender)) {
-            require(
-                _healthFactorOf(msg.sender) >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD, "Pool: HF < 1"
-            );
+            require(_healthFactorOf(msg.sender) >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD, "Pool: HF < 1");
         }
 
         emit Withdraw(asset, msg.sender, to, amountToWithdraw);
@@ -290,11 +286,7 @@ contract LendingPool is ILendingPool {
      *      credit delegation (VariableDebtToken.approveDelegation). The borrowed
      *      funds are always sent to msg.sender.
      */
-    function borrow(address asset, uint256 amount, address onBehalfOf)
-        external
-        nonReentrant
-        whenNotPaused
-    {
+    function borrow(address asset, uint256 amount, address onBehalfOf) external nonReentrant whenNotPaused {
         DataTypes.ReserveData storage r = _reserves[asset];
         require(r.config.isActive, "Pool: reserve inactive");
         require(!r.config.isFrozen, "Pool: reserve frozen");
@@ -307,9 +299,8 @@ contract LendingPool is ILendingPool {
         // user's collateral. Borrowing on behalf of someone else requires an
         // explicit credit delegation allowance.
         if (onBehalfOf != msg.sender) {
-            VariableDebtToken(r.variableDebtTokenAddress).decreaseBorrowAllowance(
-                onBehalfOf, msg.sender, amount
-            );
+            VariableDebtToken(r.variableDebtTokenAddress)
+                .decreaseBorrowAllowance(onBehalfOf, msg.sender, amount);
         }
 
         uint256 borrowCap = r.config.borrowCap;
@@ -372,9 +363,7 @@ contract LendingPool is ILendingPool {
     {
         DataTypes.ReserveData storage r = _reserves[asset];
         require(r.config.isActive, "Pool: reserve inactive");
-        require(
-            AToken(r.aTokenAddress).scaledBalanceOf(msg.sender) != 0, "Pool: no deposit"
-        );
+        require(AToken(r.aTokenAddress).scaledBalanceOf(msg.sender) != 0, "Pool: no deposit");
         if (useAsCollateral) {
             require(r.config.usableAsCollateral, "Pool: not collateralizable");
             _setUsingAsCollateral(msg.sender, r.id, true);
@@ -382,10 +371,7 @@ contract LendingPool is ILendingPool {
         } else {
             _setUsingAsCollateral(msg.sender, r.id, false);
             if (_isBorrowingAny(msg.sender)) {
-                require(
-                    _healthFactorOf(msg.sender) >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD,
-                    "Pool: HF < 1"
-                );
+                require(_healthFactorOf(msg.sender) >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD, "Pool: HF < 1");
             }
             emit ReserveUsedAsCollateralDisabled(asset, msg.sender);
         }
@@ -477,9 +463,7 @@ contract LendingPool is ILendingPool {
         _updateState(collateralReserve);
         _updateState(debtReserve);
 
-        require(
-            _healthFactorOf(user) < HEALTH_FACTOR_LIQUIDATION_THRESHOLD, "Pool: position healthy"
-        );
+        require(_healthFactorOf(user) < HEALTH_FACTOR_LIQUIDATION_THRESHOLD, "Pool: position healthy");
 
         LiquidationVars memory v;
         v.userDebt = VariableDebtToken(debtReserve.variableDebtTokenAddress).balanceOf(user);
@@ -499,16 +483,13 @@ contract LendingPool is ILendingPool {
         (v.collateralToSeize, v.actualDebtToCover) = _calculateSeizeAmount(collateralReserve, v);
 
         // Burn the covered debt and pull the repayment from the liquidator.
-        VariableDebtToken(debtReserve.variableDebtTokenAddress).burn(
-            user, v.actualDebtToCover, debtReserve.variableBorrowIndex
-        );
+        VariableDebtToken(debtReserve.variableDebtTokenAddress)
+            .burn(user, v.actualDebtToCover, debtReserve.variableBorrowIndex);
         if (VariableDebtToken(debtReserve.variableDebtTokenAddress).scaledBalanceOf(user) == 0) {
             _setBorrowing(user, debtReserve.id, false);
         }
         require(
-            IERC20Minimal(debtAsset).transferFrom(
-                msg.sender, debtReserve.aTokenAddress, v.actualDebtToCover
-            ),
+            IERC20Minimal(debtAsset).transferFrom(msg.sender, debtReserve.aTokenAddress, v.actualDebtToCover),
             "Pool: repay transfer failed"
         );
         _updateInterestRates(debtAsset, debtReserve);
@@ -516,11 +497,9 @@ contract LendingPool is ILendingPool {
         // Seize the collateral for the liquidator (as aTokens or underlying).
         uint256 cIndex = collateralReserve.liquidityIndex;
         if (receiveAToken) {
-            bool liquidatorFirst =
-                AToken(collateralReserve.aTokenAddress).scaledBalanceOf(msg.sender) == 0;
-            AToken(collateralReserve.aTokenAddress).transferOnLiquidation(
-                user, msg.sender, v.collateralToSeize, cIndex
-            );
+            bool liquidatorFirst = AToken(collateralReserve.aTokenAddress).scaledBalanceOf(msg.sender) == 0;
+            AToken(collateralReserve.aTokenAddress)
+                .transferOnLiquidation(user, msg.sender, v.collateralToSeize, cIndex);
             if (liquidatorFirst && collateralReserve.config.usableAsCollateral) {
                 _setUsingAsCollateral(msg.sender, collateralReserve.id, true);
                 emit ReserveUsedAsCollateralEnabled(collateralAsset, msg.sender);
@@ -550,10 +529,11 @@ contract LendingPool is ILendingPool {
     /// @dev Converts the debt-to-cover into a collateral amount including the
     ///      liquidation bonus, capping at the user's collateral and scaling the
     ///      covered debt back down if the collateral is the binding constraint.
-    function _calculateSeizeAmount(
-        DataTypes.ReserveData storage collateralReserve,
-        LiquidationVars memory v
-    ) internal view returns (uint256 collateralAmount, uint256 debtToCover) {
+    function _calculateSeizeAmount(DataTypes.ReserveData storage collateralReserve, LiquidationVars memory v)
+        internal
+        view
+        returns (uint256 collateralAmount, uint256 debtToCover)
+    {
         uint256 debtValueBase = _toBase(v.debtPrice, v.actualDebtToCover, v.debtDecimals);
         uint256 bonusValueBase = (debtValueBase * collateralReserve.config.liquidationBonus) / BPS;
 
@@ -563,10 +543,8 @@ contract LendingPool is ILendingPool {
         if (maxCollateral > v.userCollateralBalance) {
             collateralAmount = v.userCollateralBalance;
             // Recompute the debt actually covered for the seized collateral.
-            uint256 seizedValueBase =
-                (collateralAmount * v.collateralPrice) / (10 ** v.collateralDecimals);
-            uint256 debtValueForSeized =
-                (seizedValueBase * BPS) / collateralReserve.config.liquidationBonus;
+            uint256 seizedValueBase = (collateralAmount * v.collateralPrice) / (10 ** v.collateralDecimals);
+            uint256 debtValueForSeized = (seizedValueBase * BPS) / collateralReserve.config.liquidationBonus;
             debtToCover = (debtValueForSeized * (10 ** v.debtDecimals)) / v.debtPrice;
         } else {
             collateralAmount = maxCollateral;
@@ -602,9 +580,7 @@ contract LendingPool is ILendingPool {
 
         // The sender's position must remain healthy after moving collateral out.
         if (_isBorrowingAny(from)) {
-            require(
-                _healthFactorOf(from) >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD, "Pool: HF < 1"
-            );
+            require(_healthFactorOf(from) >= HEALTH_FACTOR_LIQUIDATION_THRESHOLD, "Pool: HF < 1");
         }
     }
 
@@ -679,9 +655,8 @@ contract LendingPool is ILendingPool {
         DataTypes.ReserveData storage r = _reserves[asset];
         uint40 last = r.lastUpdateTimestamp;
         if (last == uint40(block.timestamp)) return r.variableBorrowIndex;
-        return MathUtils.calculateCompoundedInterest(r.currentVariableBorrowRate, last).rayMul(
-            r.variableBorrowIndex
-        );
+        return MathUtils.calculateCompoundedInterest(r.currentVariableBorrowRate, last)
+            .rayMul(r.variableBorrowIndex);
     }
 
     // --------------------------------------------------------------------- //

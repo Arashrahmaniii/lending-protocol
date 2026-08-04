@@ -37,9 +37,8 @@ contract Deploy is Script {
         pool.setConfigurator(address(configurator));
 
         // Kinked rate curve: optimal 80%, base 0, slope1 4%, slope2 75% (APR, ray).
-        DefaultInterestRateStrategy strategy = new DefaultInterestRateStrategy(
-            (80 * RAY) / 100, 0, (4 * RAY) / 100, (75 * RAY) / 100
-        );
+        DefaultInterestRateStrategy strategy =
+            new DefaultInterestRateStrategy((80 * RAY) / 100, 0, (4 * RAY) / 100, (75 * RAY) / 100);
 
         MockERC20 weth = new MockERC20("Wrapped Ether", "WETH", 18);
         MockERC20 usdc = new MockERC20("USD Coin", "USDC", 6);

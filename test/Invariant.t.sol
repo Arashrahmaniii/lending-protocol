@@ -36,10 +36,7 @@ contract InvariantTest is BaseTest {
         _checkSolvent(address(usdc), aUsdc, dUsdc);
     }
 
-    function _checkSolvent(address asset, AToken aToken, VariableDebtToken debtToken)
-        internal
-        view
-    {
+    function _checkSolvent(address asset, AToken aToken, VariableDebtToken debtToken) internal view {
         uint256 cash = MockERC20(asset).balanceOf(address(aToken));
         uint256 totalDebt = debtToken.totalSupply();
         uint256 owedToSuppliers = aToken.totalSupply();
