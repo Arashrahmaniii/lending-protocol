@@ -82,10 +82,10 @@ contract AToken is ERC20Base, IScaledToken {
     function _transfer(address from, address to, uint256 amount) internal {
         require(to != address(0), "AToken: to zero");
         uint256 index = pool.getReserveNormalizedIncome(underlying);
-        uint256 scaled = amount.rayDiv(index);
+        uint256 fromBefore = _scaledBalances[from];
+        uint256 scaled = _scaledToRemove(fromBefore, amount, index);
         require(scaled != 0, "AToken: invalid amount");
 
-        uint256 fromBefore = _scaledBalances[from];
         uint256 toBefore = _scaledBalances[to];
         require(fromBefore >= scaled, "AToken: balance");
 
@@ -101,8 +101,12 @@ contract AToken is ERC20Base, IScaledToken {
     //                          Pool-only actions                            //
     // --------------------------------------------------------------------- //
 
+    // Rounding: shares minted round down and shares removed round up, so a holder can
+    // never take out more than they put in. Removing the whole balance burns exactly
+    // the scaled balance, so a full exit never reverts on a 1-wei rounding difference.
+
     function mint(address to, uint256 amount, uint256 index) external onlyPool returns (bool firstMint) {
-        uint256 scaled = amount.rayDiv(index);
+        uint256 scaled = amount.rayDivDown(index);
         require(scaled != 0, "AToken: invalid mint");
         firstMint = _scaledBalances[to] == 0;
         _scaledBalances[to] += scaled;
@@ -111,7 +115,7 @@ contract AToken is ERC20Base, IScaledToken {
     }
 
     function burn(address from, uint256 amount, uint256 index) external onlyPool {
-        uint256 scaled = amount.rayDiv(index);
+        uint256 scaled = _scaledToRemove(_scaledBalances[from], amount, index);
         require(scaled != 0, "AToken: invalid burn");
         _scaledBalances[from] -= scaled;
         _scaledTotalSupply -= scaled;
@@ -123,10 +127,21 @@ contract AToken is ERC20Base, IScaledToken {
         external
         onlyPool
     {
-        uint256 scaled = amount.rayDiv(index);
+        uint256 scaled = _scaledToRemove(_scaledBalances[from], amount, index);
         _scaledBalances[from] -= scaled;
         _scaledBalances[to] += scaled;
         emit Transfer(from, to, amount);
+    }
+
+    /// @dev Scaled amount to take from a holder for `amount` of underlying: the whole
+    ///      scaled balance when `amount` is the full balance, otherwise rounded up.
+    function _scaledToRemove(uint256 scaledBalance, uint256 amount, uint256 index)
+        internal
+        pure
+        returns (uint256)
+    {
+        if (amount == scaledBalance.rayMul(index)) return scaledBalance;
+        return amount.rayDivUp(index);
     }
 
     /// @notice Sends the underlying asset out of the aToken vault. Pool-only.

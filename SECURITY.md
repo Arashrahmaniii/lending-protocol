@@ -45,11 +45,18 @@ the flow is closed within one transaction:
    must return `true`.
 3. Only then is `amount + premium` pulled back.
 
-An attacker naming an uninvolved victim would first have to send that victim the
-principal. The pull is bounded by `amount + premium`, and the victim nets a gain
-of `-premium` at worst while the attacker funds the principal — there is no
-profitable direction. The function is additionally `nonReentrant` and
-`whenNotPaused`.
+The pool itself funds the principal, so naming a victim does not let anyone
+drain the victim's approval: the pull is bounded by the `amount` just sent plus
+`premium`. What remains is griefing. A receiver contract whose
+`executeOperation` returns `true` without checking `initiator` can be made to
+pay the premium for a flash loan someone else triggered. The attacker gains
+nothing, but the receiver loses the premium. Receivers must check that
+`initiator` is an address they trust; the test mock documents this. The
+function is additionally `nonReentrant` and `whenNotPaused`.
+
+(An earlier version of this note said the attacker would have to send the victim
+the principal first. That was wrong, since the pool sends it, and the griefing
+bound above replaces it.)
 
 This is the Aave V2/V3 flash-loan shape, and it is a deliberate design choice
 documented at `:402-404`: reentrancy into the pool during the callback is blocked
@@ -138,8 +145,15 @@ none of them. These are covered by the test suite instead:
   weighted-LTV sum lets an underwater position escape liquidation or a healthy
   one get seized. Covered by unit and fuzz tests.
 - **Oracle staleness.** `ChainlinkPriceOracle` rejects non-positive answers,
-  incomplete rounds, and prices older than a per-feed heartbeat. Covered in
+  incomplete rounds, and prices older than a per-feed heartbeat. If a fallback
+  oracle is configured, a failing feed falls through to it, so health checks and
+  liquidations keep working through a feed outage. Covered in
   `test/ChainlinkOracle.t.sol`.
+- **Rounding direction.** Supply shares mint rounded down and burn rounded up;
+  debt shares mint rounded up and burn rounded down. Full exits burn the exact
+  scaled balance. Fuzzed in `test/Hardening.t.sol`.
+- **Repay during a pause.** `repay` is not pausable, because interest keeps
+  accruing while the pool is paused. Liquidations stay paused.
 
 ## Known improvements
 

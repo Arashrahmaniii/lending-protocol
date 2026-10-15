@@ -63,14 +63,16 @@ contract InvariantTest is BaseTest {
         assertEq(aUsdc.scaledTotalSupply(), sumUsdc, "aUSDC scaled supply consistent");
     }
 
-    /// @dev No position that the pool itself created can be unhealthy unless
-    ///      prices moved — and the handler never moves prices.
-    function invariant_NoUnhealthyPositionsWithoutPriceMoves() public view {
-        address[3] memory actors = handler.getActors();
-        for (uint256 i = 0; i < 3; i++) {
-            (,,,,, uint256 hf) = pool.getUserAccountData(actors[i]);
-            assertGe(hf, 1e18, "no self-inflicted underwater positions");
-        }
+    /// @dev A user's own action (borrow, withdraw) can never leave their position under
+    ///      HF 1: the pool must reject it. Accrued interest can still push a position
+    ///      under 1 between actions; that is what liquidation is for
+    ///      (see HardeningTest.test_interestAloneMakesPositionLiquidatable).
+    ///
+    ///      An earlier version asserted HF >= 1 for every actor after every sequence.
+    ///      That is false: borrowing near max LTV and then warping lets interest pull HF
+    ///      below 1 without any price move, so the invariant failed on some seeds.
+    function invariant_UserActionsNeverLeavePositionUnderwater() public view {
+        assertEq(handler.ghost_actionsLeavingUnhealthy(), 0, "a user action left its own position under HF 1");
     }
 }
 
@@ -84,6 +86,9 @@ contract Handler is Test {
     VariableDebtToken dUsdc;
 
     address[3] public actors;
+
+    /// @dev Successful borrows/withdraws that left the caller under HF 1.
+    uint256 public ghost_actionsLeavingUnhealthy;
 
     constructor(
         LendingPool _pool,
@@ -136,7 +141,9 @@ contract Handler is Test {
         if (balance == 0) return;
         amount = bound(amount, 1, balance);
         vm.prank(actor);
-        try pool.withdraw(address(weth), amount, actor) {} catch {}
+        try pool.withdraw(address(weth), amount, actor) {
+            _recordHealth(actor);
+        } catch {}
     }
 
     function borrow(uint256 actorSeed, uint256 amount) external {
@@ -146,7 +153,9 @@ contract Handler is Test {
         uint256 maxUsdc = availableBase / 1e12; // base(1e18) -> usdc(1e6)
         amount = bound(amount, 1e6, maxUsdc);
         vm.prank(actor);
-        try pool.borrow(address(usdc), amount, actor) {} catch {}
+        try pool.borrow(address(usdc), amount, actor) {
+            _recordHealth(actor);
+        } catch {}
     }
 
     function repay(uint256 actorSeed, uint256 amount) external {
@@ -157,6 +166,11 @@ contract Handler is Test {
         usdc.mint(actor, amount);
         vm.prank(actor);
         try pool.repay(address(usdc), amount, actor) {} catch {}
+    }
+
+    function _recordHealth(address actor) internal {
+        (,,,,, uint256 hf) = pool.getUserAccountData(actor);
+        if (hf < 1e18) ghost_actionsLeavingUnhealthy++;
     }
 
     function warp(uint256 timeDelta) external {

@@ -7,7 +7,7 @@
 
 An over-collateralised, multi-asset money market in the style of **Aave**, built from scratch in Solidity. Users supply assets to earn interest, borrow against their collateral, take **flash loans**, delegate borrowing power, and unhealthy positions are **liquidated** by keepers for a bonus.
 
-Verified by **39 tests**: unit, fuzz (property-based), and stateful **invariant** testing with a randomized multi-actor handler.
+Verified by **48 tests**: unit, fuzz (property-based), and stateful **invariant** testing with a randomized multi-actor handler.
 
 > ⚠️ Reference implementation for demonstration purposes — not audited. Do not use with real funds.
 
@@ -20,10 +20,10 @@ Verified by **39 tests**: unit, fuzz (property-based), and stateful **invariant*
 | 📐 **Kinked rate model** | Two-slope utilisation curve; rates spike past optimal utilisation to protect liquidity |
 | ❤️ **Health factor engine** | Weighted LTV / liquidation thresholds across any mix of collateral & debt |
 | ⚡ **Liquidations** | 50% close factor, liquidation bonus, receive collateral as aTokens or underlying |
-| 💸 **Flash loans** | EIP-3156-style callback, 0.09% premium streamed to suppliers via the liquidity index |
+| 💸 **Flash loans** | Aave-style `executeOperation` callback, 0.09% premium streamed to suppliers via the liquidity index |
 | 🤝 **Credit delegation** | Approve another address to borrow against your collateral (uncollateralised lending building block) |
-| 🔮 **Chainlink oracle adapter** | Positive-answer + heartbeat staleness validation, per-feed config, fallback oracle |
-| 🛡️ **Safety rails** | Reentrancy guards, pause guardian, per-reserve freeze, validated risk configs, pool-only mint/burn |
+| 🔮 **Chainlink oracle adapter** | Positive-answer + heartbeat staleness validation, per-feed config, fallback oracle on missing *or failing* feeds |
+| 🛡️ **Safety rails** | Reentrancy guards, pause guardian (repay stays open), per-reserve freeze, validated risk configs, pool-only mint/burn, protocol-favouring rounding |
 
 ## Architecture
 
@@ -71,6 +71,8 @@ Verified by **39 tests**: unit, fuzz (property-based), and stateful **invariant*
 
 **Scaled balances.** Depositing `amount` mints `amount / liquidityIndex` scaled units; the visible balance is `scaled × index`. Interest is paid by growing the index — every holder's balance grows proportionally with zero per-user state.
 
+**Rounding.** Every conversion between underlying and scaled units rounds in the protocol's favour: supply shares are minted rounded down and burned rounded up, and debt shares are minted rounded up and burned rounded down. So nobody can withdraw more than they deposited or repay less than they owe, even by a wei. A full exit (`type(uint256).max`) burns the exact scaled balance, so it always clears the position.
+
 **Index updates** (on every interaction, per reserve):
 
 ```
@@ -103,14 +105,27 @@ A subtle property surfaced by the fuzz suite: once collateral value falls *below
 ## Testing
 
 ```bash
-forge test          # 39 tests: 6 suites
+forge test          # 48 tests: 7 suites
 forge build --sizes # verify every contract fits under EIP-170 (CI-enforced)
 ```
 
 - **Unit** — full lifecycle: deposit, LTV-limited borrow, interest accrual, repay, both liquidation modes, treasury fees
 - **Security-focused** — borrowing against a stranger's collateral, reentrancy via flash-loan callback, aToken transfer draining collateral, pause/freeze bypasses, config foot-guns
-- **Fuzz** (256 runs each) — lossless deposit/withdraw round-trip, borrow never exceeds LTV, interest monotonicity, liquidation improves HF
-- **Invariant** (64 runs × 32-call sequences, 3 actors) — reserve solvency (`cash + debt ≥ owed to suppliers`), scaled-supply consistency, no self-inflicted underwater positions
+- **Fuzz** (256 runs each) — lossless deposit/withdraw round-trip, borrow never exceeds LTV, interest monotonicity, liquidation improves HF, rounding never favours the user (repay, borrow, supply)
+- **Invariant** (64 runs × 32-call sequences, 3 actors) — reserve solvency (`cash + debt ≥ owed to suppliers`), scaled-supply consistency, no user action leaves its own position under HF 1
+- **Hardening** — full exits clear positions exactly, repay works while paused, interest alone can make a position liquidatable, dust debt can be liquidated
+
+### Self-review (October 2026)
+
+A later attacker-style review of this code found no High or Medium issues, but did find these Low ones, each now fixed with a regression test that fails on the old code:
+
+| Issue | Fix |
+|---|---|
+| Scaled-unit rounding was half-up, so some operations rounded in the user's favour (sub-wei per call) | Directional rounding in `AToken` / `VariableDebtToken` |
+| Pausing blocked `repay` while interest kept accruing | `repay` is no longer pausable |
+| A stale or invalid Chainlink feed reverted every health check, even with a fallback configured | Fall back on failing feeds |
+| Debt below 2 wei could never be liquidated (50% close factor rounded to 0) | Dust debt can be closed in full |
+| The invariant "no unhealthy positions without price moves" ignored interest and failed on some seeds | Replaced with "no user action leaves its own position under HF 1", plus a test that interest-driven positions are liquidatable |
 
 Slither runs in CI. [`SECURITY.md`](SECURITY.md) records the full baseline — 76
 findings, each either fixed or justified in writing — and documents the economic
@@ -132,7 +147,8 @@ forge script script/Deploy.s.sol --rpc-url http://localhost:8545 --broadcast --p
 
 - **Conservative flash loans.** The reentrancy guard stays active during the flash-loan callback, so receivers cannot re-enter the pool (e.g. to self-liquidate). This trades composability for a smaller attack surface — Aave chooses the opposite; both are defensible and the change is one modifier.
 - **Debt is non-transferable**; ERC20 `approve` on the debt token reverts. Borrowing power moves only through explicit `approveDelegation`.
-- **Close factor is a constant 50%** rather than configurable, following Aave v2. Full-position liquidation for deeply underwater accounts (Aave v3.1 behaviour) is a natural extension.
+- **Close factor is a constant 50%** rather than configurable, following Aave v2 (dust debt excepted, see above). Full-position liquidation for deeply underwater accounts (Aave v3.1 behaviour) is a natural extension.
+- **No bad-debt socialisation.** If collateral runs out before the debt does, the remaining debt stays on the books. Aave v3.3 burns it against the reserve; that is a natural extension.
 - **Oracle prices are WAD-normalised** at the adapter boundary so the pool core never deals with feed decimals.
 
 ## What I'd add next

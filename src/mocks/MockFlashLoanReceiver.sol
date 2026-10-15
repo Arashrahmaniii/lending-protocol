@@ -14,6 +14,9 @@ contract MockFlashLoanReceiver is IFlashLoanReceiver {
         pool = _pool;
     }
 
+    /// @dev Test mock. A real receiver must also check `initiator`: anyone can call
+    ///      `pool.flashLoan` with any receiver, and this mock pays the premium from its
+    ///      own balance for whoever triggered it.
     function executeOperation(address asset, uint256 amount, uint256 premium, address, bytes calldata)
         external
         returns (bool)

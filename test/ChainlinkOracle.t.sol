@@ -57,6 +57,26 @@ contract ChainlinkOracleTest is Test {
         assertEq(oracle.getAssetPrice(dai), 1e18, "falls through to fallback");
     }
 
+    function test_FallbackOracleUsedWhenFeedIsStale() public {
+        PriceOracle fallbackOracle = new PriceOracle();
+        fallbackOracle.setAssetPrice(weth, 1999e18);
+        oracle.setFallbackOracle(address(fallbackOracle));
+
+        assertEq(oracle.getAssetPrice(weth), 2000e18, "fresh feed is preferred");
+
+        vm.warp(block.timestamp + 2 hours); // heartbeat is 1 hour
+        assertEq(oracle.getAssetPrice(weth), 1999e18, "stale feed falls through to fallback");
+    }
+
+    function test_FallbackOracleUsedWhenFeedAnswerInvalid() public {
+        PriceOracle fallbackOracle = new PriceOracle();
+        fallbackOracle.setAssetPrice(weth, 1999e18);
+        oracle.setFallbackOracle(address(fallbackOracle));
+
+        ethFeed.updateAnswer(0);
+        assertEq(oracle.getAssetPrice(weth), 1999e18, "invalid answer falls through to fallback");
+    }
+
     function test_OnlyOwnerCanSetFeed() public {
         vm.prank(makeAddr("rando"));
         vm.expectRevert(bytes("Oracle: not owner"));

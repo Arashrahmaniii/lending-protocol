@@ -26,7 +26,9 @@ interface IERC20Minimal {
  *         cumulative RAY indexes.
  *
  * @dev Security model:
- *      - every state-mutating entry point is reentrancy-guarded and pausable
+ *      - every state-mutating entry point is reentrancy-guarded and pausable,
+ *        except repay, which stays open so debt can always be reduced
+ *      - share rounding always favours the protocol (see AToken / VariableDebtToken)
  *      - aToken/debtToken mint & burn are pool-only
  *      - reserve risk parameters are validated on initialisation and update
  *      - collateral cannot leave a position (withdraw / aToken transfer /
@@ -324,10 +326,12 @@ contract LendingPool is ILendingPool {
         emit Borrow(asset, msg.sender, onBehalfOf, amount);
     }
 
+    /// @dev Deliberately not pausable: interest keeps accruing while the pool is paused,
+    ///      so borrowers must always be able to reduce their debt. Otherwise positions
+    ///      could drift under HF 1 during a pause and be liquidated the moment it lifts.
     function repay(address asset, uint256 amount, address onBehalfOf)
         external
         nonReentrant
-        whenNotPaused
         returns (uint256)
     {
         DataTypes.ReserveData storage r = _reserves[asset];
@@ -472,6 +476,9 @@ contract LendingPool is ILendingPool {
 
         // A liquidator may repay at most `closeFactor` of the user's debt in one call.
         v.maxDebtToLiquidate = (v.userDebt * LIQUIDATION_CLOSE_FACTOR) / BPS;
+        // Dust debt (where half rounds to zero) can be closed in full; otherwise it could
+        // never be liquidated.
+        if (v.maxDebtToLiquidate == 0) v.maxDebtToLiquidate = v.userDebt;
         v.actualDebtToCover = debtToCover > v.maxDebtToLiquidate ? v.maxDebtToLiquidate : debtToCover;
 
         v.collateralPrice = oracle.getAssetPrice(collateralAsset);

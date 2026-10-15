@@ -35,6 +35,20 @@ library WadRayMath {
         return (a * RAY + b / 2) / b;
     }
 
+    /// @dev a / b in RAY, rounded down. Used where rounding must favour the protocol
+    ///      by giving the user less (supply shares minted, debt shares burned).
+    function rayDivDown(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b != 0, "WadRayMath: div by zero");
+        return (a * RAY) / b;
+    }
+
+    /// @dev a / b in RAY, rounded up. Used where rounding must favour the protocol
+    ///      by taking more from the user (supply shares burned, debt shares minted).
+    function rayDivUp(uint256 a, uint256 b) internal pure returns (uint256) {
+        require(b != 0, "WadRayMath: div by zero");
+        return (a * RAY + b - 1) / b;
+    }
+
     function rayToWad(uint256 a) internal pure returns (uint256) {
         uint256 halfRatio = WAD_RAY_RATIO / 2;
         return (halfRatio + a) / WAD_RAY_RATIO;

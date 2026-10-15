@@ -98,8 +98,12 @@ contract VariableDebtToken is ERC20Base, IScaledToken {
     //                          Pool-only actions                            //
     // --------------------------------------------------------------------- //
 
+    // Rounding: debt minted rounds up and debt repaid rounds down, so a borrower can
+    // never owe less than they took out. Repaying the whole balance burns exactly the
+    // scaled balance, so a full repayment always clears the position.
+
     function mint(address to, uint256 amount, uint256 index) external onlyPool returns (bool firstMint) {
-        uint256 scaled = amount.rayDiv(index);
+        uint256 scaled = amount.rayDivUp(index);
         require(scaled != 0, "DebtToken: invalid mint");
         firstMint = _scaledBalances[to] == 0;
         _scaledBalances[to] += scaled;
@@ -108,7 +112,8 @@ contract VariableDebtToken is ERC20Base, IScaledToken {
     }
 
     function burn(address from, uint256 amount, uint256 index) external onlyPool {
-        uint256 scaled = amount.rayDiv(index);
+        uint256 scaledBalance = _scaledBalances[from];
+        uint256 scaled = amount == scaledBalance.rayMul(index) ? scaledBalance : amount.rayDivDown(index);
         require(scaled != 0, "DebtToken: invalid burn");
         _scaledBalances[from] -= scaled;
         _scaledTotalSupply -= scaled;
